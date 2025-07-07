@@ -116,6 +116,7 @@ async function notifyUserForMoreApproval(planId, userId) {
 async function executeDCAPlan(plan, currentTimestamp) {
   try {
     console.log("Executing DCA plan:", plan);
+    console.log("Current timestamp:", currentTimestamp);
     // Execute the DCA plan
     const tx = await contractInstance.executeDCAPlan(
       plan.recipient, // _user
@@ -228,6 +229,7 @@ async function executeDCAPlan(plan, currentTimestamp) {
 async function checkAndExecutePlans() {
   try {
     const currentTimestamp = Math.floor(Date.now() / 1000);
+    console.log(`Current timestamp: ${currentTimestamp}`);
 
     try {
       // Get all active plans with token information
@@ -245,22 +247,58 @@ async function checkAndExecutePlans() {
 
       for (const plan of plans) {
         try {
+          console.log(`\n--- Processing Plan ${plan.id} ---`);
+          console.log(`Plan ID: ${plan.planId}`);
+          console.log(`Recipient: ${plan.recipient}`);
+          console.log(`Amount In: ${plan.amountIn}`);
+          console.log(`Frequency: ${plan.frequency} seconds`);
+          console.log(`Last Executed At: ${plan.lastExecutedAt}`);
+          console.log(
+            `Token In: ${plan.tokenIn.symbol} (${plan.tokenIn.address})`
+          );
+          console.log(
+            `Token Out: ${plan.tokenOut.symbol} (${plan.tokenOut.address})`
+          );
+
           const timeSinceLastExecution = currentTimestamp - plan.lastExecutedAt;
           const frequencySeconds = Number(plan.frequency);
 
+          console.log(
+            `Time since last execution: ${timeSinceLastExecution} seconds`
+          );
+          console.log(`Frequency required: ${frequencySeconds} seconds`);
+          console.log(
+            `Should execute: ${timeSinceLastExecution >= frequencySeconds}`
+          );
+
           // 1. Check if enough time has passed since last execution
           if (timeSinceLastExecution >= frequencySeconds) {
+            console.log(`✅ Plan ${plan.id} is due for execution`);
+
             const amountIn = Number(plan.amountIn);
+            console.log(`Amount to execute: ${amountIn}`);
 
             // 2. Check actual token allowance from blockchain
             try {
+              console.log(`Checking allowance for ${plan.tokenIn.symbol}...`);
               const currentAllowance = await checkTokenAllowance(
                 plan.tokenIn.address, // USDC token address
                 plan.recipient // user's wallet address
               );
 
+              console.log(`Current allowance: ${currentAllowance.toString()}`);
+              console.log(`Required amount: ${amountIn}`);
+              console.log(
+                `Allowance sufficient: ${Number(currentAllowance) >= amountIn}`
+              );
+
               // 3. Skip execution if amountIn is greater than current allowance
               if (amountIn > Number(currentAllowance)) {
+                console.log(
+                  `❌ Skipping plan ${
+                    plan.id
+                  } - insufficient allowance. Required: ${amountIn}, Available: ${currentAllowance.toString()}`
+                );
                 await notifyUserForMoreApproval(plan.id, plan.userId);
                 continue;
               }
@@ -307,19 +345,20 @@ async function checkAndExecutePlans() {
   }
 }
 
-// Main function for AWS Lambda
-export const handler = async function (event, context) {
-  context.callbackWaitsForEmptyEventLoop = false;
-
+// Main function
+async function main() {
   try {
     console.log("Starting DCA plans execution...");
     await checkAndExecutePlans();
     console.log("DCA plans execution completed successfully");
   } catch (error) {
     console.error("Error executing DCA plans:", error);
-    throw error; // Re-throw the error to mark the Lambda execution as failed
+    process.exit(1);
   } finally {
     // Close Prisma connection
     await prisma.$disconnect();
   }
-};
+}
+
+// Run the main function
+main();
