@@ -5,6 +5,7 @@ const prisma = new PrismaClient();
 
 // Contract setup
 const DCA_EXECUTOR_ADDRESS = process.env.DCA_EXECUTOR_ADDRESS;
+const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"; // USDC on Base
 const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
 const signer = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
 
@@ -208,7 +209,7 @@ async function executeDCAPlan(plan, currentTimestamp) {
     // For now, we need to determine the source token
     // Since the schema doesn't have tokenIn, we'll need to determine this based on your logic
     // For this example, I'll assume USDC as the source token - you may need to adjust this
-    const srcToken = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"; // USDC on Base
+    const srcToken = USDC_ADDRESS; // USDC on Base
     const dstToken = plan.tokenOut.address;
     const amount = plan.amountIn.toString();
     const fromAddress = plan.userWallet;
@@ -413,19 +414,19 @@ async function checkAndExecutePlans() {
             if (!plan.tokenOut.isWrapped) {
               try {
                 console.log(
-                  `Checking allowance for ${plan.tokenOut.symbol}...`
+                  `Checking USDC allowance for ${plan.tokenOut.symbol} swap...`
                 );
                 const currentAllowance = await checkTokenAllowance(
-                  plan.tokenOut.address, // token address
+                  USDC_ADDRESS, // USDC address
                   plan.userWallet // user's wallet address
                 );
 
                 console.log(
-                  `Current allowance: ${currentAllowance.toString()}`
+                  `Current USDC allowance: ${currentAllowance.toString()}`
                 );
-                console.log(`Required amount: ${amountIn}`);
+                console.log(`Required USDC amount: ${amountIn}`);
                 console.log(
-                  `Allowance sufficient: ${
+                  `USDC allowance sufficient: ${
                     Number(currentAllowance) >= amountIn
                   }`
                 );
@@ -435,7 +436,7 @@ async function checkAndExecutePlans() {
                   console.log(
                     `❌ Skipping plan ${
                       plan.planHash
-                    } - insufficient allowance. Required: ${amountIn}, Available: ${currentAllowance.toString()}`
+                    } - insufficient USDC allowance. Required: ${amountIn}, Available: ${currentAllowance.toString()}`
                   );
                   await notifyUserForMoreApproval(
                     plan.planHash,

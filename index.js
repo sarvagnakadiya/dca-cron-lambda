@@ -5,12 +5,17 @@ const prisma = new PrismaClient();
 
 // Contract setup
 const DCA_EXECUTOR_ADDRESS = process.env.DCA_EXECUTOR_ADDRESS;
+const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"; // USDC on Base
 const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
 const signer = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
 
 // 1inch API configuration
 const ONEINCH_API_KEY = process.env.ONEINCH_API_KEY;
 const ONEINCH_BASE_URL = "https://api.1inch.dev/swap/v6.0/8453/swap";
+
+// GeckoTerminal API configuration
+const GECKOTERMINAL_BASE_URL =
+  "https://api.geckoterminal.com/api/v2/networks/base/tokens";
 
 const DCAExecutorABI = [
   {
@@ -208,7 +213,7 @@ async function executeDCAPlan(plan, currentTimestamp) {
     // For now, we need to determine the source token
     // Since the schema doesn't have tokenIn, we'll need to determine this based on your logic
     // For this example, I'll assume USDC as the source token - you may need to adjust this
-    const srcToken = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"; // USDC on Base
+    const srcToken = USDC_ADDRESS; // USDC on Base
     const dstToken = plan.tokenOut.address;
     const amount = plan.amountIn.toString();
     const fromAddress = plan.userWallet;
@@ -359,6 +364,116 @@ async function executeDCAPlan(plan, currentTimestamp) {
   }
 }
 
+async function fetchTokenDataFromGeckoTerminal(tokenAddress) {
+  try {
+    const url = `${GECKOTERMINAL_BASE_URL}/${tokenAddress}`;
+    console.log(`Fetching token data from GeckoTerminal: ${url}`);
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `GeckoTerminal API error: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    console.log("GeckoTerminal API response:", JSON.stringify(data, null, 2));
+
+    if (data.data && data.data.attributes) {
+      const attributes = data.data.attributes;
+      return {
+        price: attributes.price_usd ? parseFloat(attributes.price_usd) : null,
+        fdv: attributes.fdv_usd ? parseFloat(attributes.fdv_usd) : null,
+        marketcap: attributes.market_cap_usd
+          ? parseFloat(attributes.market_cap_usd)
+          : null,
+        volume24h: attributes.volume_usd?.h24
+          ? parseFloat(attributes.volume_usd.h24)
+          : null,
+        totalSupply: attributes.normalized_total_supply
+          ? parseFloat(attributes.normalized_total_supply)
+          : null,
+      };
+    } else {
+      throw new Error("Invalid response structure from GeckoTerminal API");
+    }
+  } catch (error) {
+    console.error(`Error fetching token data for ${tokenAddress}:`, error);
+    throw error;
+  }
+}
+
+async function updateAllTokenPrices() {
+  try {
+    console.log("Starting token price update from GeckoTerminal...");
+
+    // Get all tokens from the database
+    const tokens = await prisma.token.findMany();
+    console.log(`Found ${tokens.length} tokens to update`);
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const token of tokens) {
+      try {
+        console.log(
+          `\n--- Updating token ${token.symbol} (${token.address}) ---`
+        );
+
+        const tokenData = await fetchTokenDataFromGeckoTerminal(token.address);
+
+        // Update the token in the database
+        await prisma.token.update({
+          where: { address: token.address },
+          data: {
+            price: tokenData.price,
+            fdv: tokenData.fdv,
+            marketcap: tokenData.marketcap,
+            volume24h: tokenData.volume24h,
+            totalSupply: tokenData.totalSupply,
+          },
+        });
+
+        console.log(`✅ Successfully updated ${token.symbol}:`);
+        console.log(`   Price: $${tokenData.price}`);
+        console.log(`   FDV: $${tokenData.fdv}`);
+        console.log(`   Market Cap: $${tokenData.marketcap}`);
+        console.log(`   24h Volume: $${tokenData.volume24h}`);
+        console.log(`   Total Supply: ${tokenData.totalSupply}`);
+
+        successCount++;
+
+        // Add a small delay to avoid rate limiting
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      } catch (error) {
+        console.error(
+          `❌ Failed to update token ${token.symbol} (${token.address}):`,
+          error
+        );
+        errorCount++;
+
+        // Continue with other tokens even if one fails
+        continue;
+      }
+    }
+
+    console.log(`\n📊 Token price update completed:`);
+    console.log(`   ✅ Successfully updated: ${successCount} tokens`);
+    console.log(`   ❌ Failed to update: ${errorCount} tokens`);
+    console.log(`   📈 Total tokens processed: ${tokens.length}`);
+  } catch (error) {
+    console.error("❌ Error in updateAllTokenPrices:", error);
+    throw error;
+  }
+}
+
 async function checkAndExecutePlans() {
   try {
     const currentTimestamp = Math.floor(Date.now() / 1000);
@@ -413,19 +528,19 @@ async function checkAndExecutePlans() {
             if (!plan.tokenOut.isWrapped) {
               try {
                 console.log(
-                  `Checking allowance for ${plan.tokenOut.symbol}...`
+                  `Checking USDC allowance for ${plan.tokenOut.symbol} swap...`
                 );
                 const currentAllowance = await checkTokenAllowance(
-                  plan.tokenOut.address, // token address
+                  USDC_ADDRESS, // USDC address
                   plan.userWallet // user's wallet address
                 );
 
                 console.log(
-                  `Current allowance: ${currentAllowance.toString()}`
+                  `Current USDC allowance: ${currentAllowance.toString()}`
                 );
-                console.log(`Required amount: ${amountIn}`);
+                console.log(`Required USDC amount: ${amountIn}`);
                 console.log(
-                  `Allowance sufficient: ${
+                  `USDC allowance sufficient: ${
                     Number(currentAllowance) >= amountIn
                   }`
                 );
@@ -435,7 +550,7 @@ async function checkAndExecutePlans() {
                   console.log(
                     `❌ Skipping plan ${
                       plan.planHash
-                    } - insufficient allowance. Required: ${amountIn}, Available: ${currentAllowance.toString()}`
+                    } - insufficient USDC allowance. Required: ${amountIn}, Available: ${currentAllowance.toString()}`
                   );
                   await notifyUserForMoreApproval(
                     plan.planHash,
@@ -498,13 +613,24 @@ export const handler = async function (event, context) {
 
   try {
     console.log("Starting DCA plans execution...");
+
+    // First, update all token prices from GeckoTerminal
+    console.log("🔄 Step 1: Updating token prices from GeckoTerminal...");
+    await updateAllTokenPrices();
+    console.log("✅ Token prices updated successfully");
+
+    // Then, check and execute DCA plans
+    console.log("🔄 Step 2: Checking and executing DCA plans...");
     await checkAndExecutePlans();
-    console.log("DCA plans execution completed successfully");
+    console.log("✅ DCA plans execution completed successfully");
   } catch (error) {
-    console.error("Error executing DCA plans:", error);
+    console.error("Error in Lambda execution:", error);
     throw error; // Re-throw the error to mark the Lambda execution as failed
   } finally {
     // Close Prisma connection
     await prisma.$disconnect();
   }
 };
+
+// Export the token price update function for standalone use
+export { updateAllTokenPrices };

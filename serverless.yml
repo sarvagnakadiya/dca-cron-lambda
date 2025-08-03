@@ -1,4 +1,4 @@
-service: dca-cron-lambda
+service: dca-cron-lambda-function
 
 provider:
   name: aws
