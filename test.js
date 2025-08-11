@@ -1,7 +1,5 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "./lib/prisma.js";
 import { ethers } from "ethers";
-
-const prisma = new PrismaClient();
 
 // Contract setup
 const DCA_EXECUTOR_ADDRESS = process.env.DCA_EXECUTOR_ADDRESS;
@@ -502,9 +500,6 @@ async function main() {
   } catch (error) {
     console.error("Error executing DCA plans:", error);
     process.exit(1);
-  } finally {
-    // Close Prisma connection
-    await prisma.$disconnect();
   }
 }
 

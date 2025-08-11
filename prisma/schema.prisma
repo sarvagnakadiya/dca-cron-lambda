@@ -8,10 +8,11 @@ datasource db {
 }
 
 model User {
-  wallet    String    @id
-  fid       Int?      @unique
-  plans     DCAPlan[]
-  createdAt DateTime  @default(now())
+  wallet           String                 @id
+  fid              Int?                   @unique
+  plans            DCAPlan[]
+  portfolioChanges PortfolioDailyChange[]
+  createdAt        DateTime               @default(now())
 }
 
 model Token {
@@ -64,4 +65,31 @@ model DCAExecution {
   feeAmount       Decimal
 
   executedAt DateTime @default(now())
+}
+
+model UserVisit {
+  id        String   @id @default(cuid())
+  fid       Int
+  username  String?
+  visitedAt DateTime @default(now())
+
+  @@index([fid])
+  @@index([visitedAt])
+}
+
+model PortfolioDailyChange {
+  id         String @id @default(cuid())
+  user       User   @relation(fields: [userWallet], references: [wallet])
+  userWallet String
+
+  date               DateTime @db.Date
+  totalInvestedValue Decimal
+  currentValue       Decimal
+  percentChange      Decimal?
+
+  createdAt DateTime @default(now())
+
+  @@unique([userWallet, date])
+  @@index([userWallet])
+  @@index([date])
 }

@@ -31,6 +31,13 @@ functions:
   executeDCAPlans:
     handler: index.handler
     events:
-      - schedule: rate(1 hour)
+      - schedule: rate(5 minutes)
+    environment:
+      NODE_ENV: production
+
+  updatePortfolioValues:
+    handler: portfolio-updater.handler
+    events:
+      - schedule: cron(0 12 * * ? *) # Daily at 12:00 PM UTC (adjust timezone as needed)
     environment:
       NODE_ENV: production

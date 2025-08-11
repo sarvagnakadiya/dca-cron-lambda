@@ -1,7 +1,5 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "./lib/prisma.js";
 import { ethers } from "ethers";
-
-const prisma = new PrismaClient();
 
 // Contract setup
 const DCA_EXECUTOR_ADDRESS = process.env.DCA_EXECUTOR_ADDRESS;
@@ -626,9 +624,6 @@ export const handler = async function (event, context) {
   } catch (error) {
     console.error("Error in Lambda execution:", error);
     throw error; // Re-throw the error to mark the Lambda execution as failed
-  } finally {
-    // Close Prisma connection
-    await prisma.$disconnect();
   }
 };
 
